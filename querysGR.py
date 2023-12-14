@@ -332,11 +332,106 @@ def queryCompraAgilRegion():
         '''
     return q
 
+#!
+#-------------------------#
+# Query Top OC por Región #
+#-------------------------#
+def queryOrdenCompraRegion():
+    q = '''
+        SELECT *
+
+            FROM (
+                SELECT 
+                        case 
+                            when a.idTamano is not null then 
+                                case a.idTamano
+                                    when 1 then 'Grande'
+                                    else 'Mipyme'
+                                end
+                            else 
+                                case isnull(b.Tamano,5) 
+                                    when 1 then 'Grande'
+                                    else 'Mipyme' 
+                                end 
+                        end 'Tamano',
+                        DM_Transaccional.dbo.DimInstitucion.NombreInstitucion,
+                        DM_Transaccional.dbo.DimComprador.NombreUnidaddeCompra,
+                        DM_Transaccional.dbo.DimLocalidad.Region,
+                        DM_Transaccional.dbo.DimProveedor.NombreSucursal,
+                        --DM_Transaccional.dbo.DimTamanoProveedor.Tamano,
+                        DM_Transaccional.dbo.THOrdenesCompra.CodigoOC,
+                        DM_Transaccional.dbo.THOrdenesCompra.NombreOC,
+                        DM_Transaccional.dbo.THOportunidadesNegocio.NombreAdq as NombreLic,
+                        ISNULL(DM_Transaccional.dbo.THOportunidadesNegocio.NombreAdq, DM_Transaccional.dbo.THOrdenesCompra.NombreOC) as MotivoCompra,
+                        round(DM_Transaccional.dbo.THOrdenesCompra.MontoUSD + DM_Transaccional.dbo.THOrdenesCompra.ImpuestoUSD,0) USD_BRUTO,
+                        DM_Transaccional.dbo.THOrdenesCompra.MontoCLP + DM_Transaccional.dbo.THOrdenesCompra.ImpuestoCLP PESOS_BRUTO,
+                        Rank()
+                        OVER (Partition BY DM_Transaccional.dbo.DimLocalidad.Region
+                            ORDER BY DM_Transaccional.dbo.THOrdenesCompra.MontoUSD DESC ) AS Rank
+
+                FROM	DM_Transaccional.dbo.DimInstitucion INNER JOIN
+                        DM_Transaccional.dbo.DimComprador ON DM_Transaccional.dbo.DimInstitucion.entCode = DM_Transaccional.dbo.DimComprador.entCode INNER JOIN
+                        DM_Transaccional.dbo.DimLocalidad ON DM_Transaccional.dbo.DimComprador.IDLocalidadUnidaddeCompra = DM_Transaccional.dbo.DimLocalidad.IDLocalidad INNER JOIN
+                        DM_Transaccional.dbo.THOrdenesCompra ON DM_Transaccional.dbo.DimComprador.IDUnidaddeCompra = DM_Transaccional.dbo.THOrdenesCompra.IDUnidaddeCompra INNER JOIN
+                        DM_Transaccional.dbo.DimProveedor ON DM_Transaccional.dbo.DimProveedor.IDSucursal = DM_Transaccional.dbo.THOrdenesCompra.IDSucursal INNER JOIN
+                        --DM_Transaccional.dbo.DimTamanoProveedor ON DM_Transaccional.dbo.DimTamanoProveedor.IdTamano = DM_Transaccional.dbo.DimProveedor.IdTamano INNER JOIN
+                        DM_Transaccional.dbo.DimTiempo ON DM_Transaccional.dbo.DimTiempo.DateKey =  DM_Transaccional.dbo.THOrdenesCompra.IDFechaEnvioOC LEFT JOIN
+                        DM_Transaccional.dbo.THOportunidadesNegocio ON DM_Transaccional.dbo.THOportunidadesNegocio.rbhCode = DM_Transaccional.dbo.THOrdenesCompra.rbhCode
+                        left join   [DM_Transaccional].[dbo].[THTamanoProveedor] a on a.entcode=[DM_Transaccional].[dbo].[dimproveedor].entCode and AñoTributario=2021
+                        left join Estudios.dbo.TamanoProveedorNuevos20230809 b on [DM_Transaccional].[dbo].[dimproveedor].entcode=b.entCode
+                
+                where	DM_Transaccional.dbo.dimtiempo.Year = 2023
+                        and DM_Transaccional.dbo.dimtiempo.month between 1 and 8
+                ) rs
+
+            WHERE Rank <= 5
+
+            ORDER BY Region ASC, Rank ASC
+        '''
+    return q
+
+
+#--------------------------#
+# Query Totales Nacionales #
+#--------------------------#
+def QueryTotalesNacionales():
+    q = '''
+        DECLARE @ANO Int
+        DECLARE @ANOM1 Int
+        SET @ANO = 2023
+        SET @ANOM1 = @ANO - 1
+
+        SELECT @ANO 'ANO', 
+                SUM(OC.MontoCLF+OC.ImpuestoCLF) 'MONTOCLF', 
+                SUM(OC.MontoUSD+OC.ImpuestoUSD) 'MONTOUSD',
+                SUM(OC.MontoCLP+OC.ImpuestoCLP) 'MONTOCLP', 
+                COUNT(OC.MontoCLF) 'CANTIDADOC'	
+        FROM DM_Transaccional..THOrdenesCompra AS OC LEFT JOIN 
+                DM_Transaccional..DimTiempo AS TPO	ON OC.IDFechaEnvioOC=TPO.DateKey 
+        WHERE   TPO.YEAR in (@ANO) -- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
+                AND tpo.Month <=8
+
+        UNION
+
+        SELECT @ANOM1 'ANO', 
+                SUM(OC.MontoCLF+OC.ImpuestoCLF) 'MONTOCLF', 
+                SUM(OC.MontoUSD+OC.ImpuestoUSD) 'MONTOUSD',
+                SUM(OC.MontoCLP+OC.ImpuestoCLP) 'MONTOCLP', 
+                COUNT(OC.MontoCLF) 'CANTIDADOC'	
+        FROM [10.34.71.227].DM_Transaccional_2022.dbo.THOrdenesCompra AS OC LEFT JOIN 
+                [10.34.71.227].DM_Transaccional_2022.dbo.DimTiempo AS TPO    ON OC.IDFechaEnvioOC=TPO.DateKey 
+        WHERE   TPO.YEAR in (@ANOM1) -- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
+                AND tpo.Month <=8
+
+        ORDER BY ANO DESC
+        '''
+    return q 
+
 
 #------------------------#
 # Montos OOPP Nacionales #
 #------------------------#
-def QueryOOPPNacional():
+def QueryOrgnismosPublicoNacional():
     q = '''
         SELECT TOP 3
         i.entCode,
@@ -382,6 +477,53 @@ def QuerySectorNacional():
         GROUP BY  SECTOR
 
         order by Monto_Bruto_USD DESC
+        '''
+    return q
+
+
+#----------------------------------------------#
+# Totales Proveedores Grande y Mipyme Nacional #
+#----------------------------------------------#
+def QueryTotalProveedoresNacional():
+    q = '''
+        SELECT       
+                case 
+                    when a.idTamano is not null then 
+                        case a.idTamano when 1 then 'Grande'
+                            else 'Mipyme'
+                        end
+                    else 
+                        case isnull(b.Tamano,5) 
+                            when 1 then 'Grande'
+                            else 'Mipyme'
+                        end
+                end 'Tamano'
+                ,SUM(OC.MontoUSD+OC.ImpuestoUSD) 'MONTOUSD'
+                , SUM(OC.MontoCLF+OC.ImpuestoCLF) 'MONTOCLF'
+                ,SUM(OC.MontoCLP+OC.ImpuestoCLP) 'MONTOCLP'
+                ,count(distinct oc.porid) CantOC
+                ,COUNT(DISTINCT P.RUTSucursal) 'CantProveedores'
+                    --  into #aux1
+
+        FROM	DM_Transaccional..THOrdenesCompra AS OC     
+                inner JOIN DM_Transaccional..DimTiempo AS TPO                     ON OC.IDFechaEnvioOC=TPO.DateKey 
+                inner join [DM_Transaccional].[dbo].[dimproveedor] p on p.orgCode=oc.IDSucursal
+                left join   [DM_Transaccional].[dbo].[THTamanoProveedor] a on a.entcode=p.entCode and AñoTributario=2021
+                left join Estudios.dbo.TamanoProveedorNuevos20230809 b on p.entcode=b.entCode
+
+        WHERE   TPO.YEAR in (2023) and TPO.MONTH >= 1 AND TPO.MONTH <= 8
+
+        group by case 
+                    when a.idTamano is not null then 
+                    case a.idTamano when 1 then 'Grande'
+                        else 'Mipyme'
+                    end
+                else 
+                    case isnull(b.Tamano,5) 
+                        when 1 then 'Grande'
+                        else 'Mipyme'
+                    end 
+                end
         '''
     return q
 
