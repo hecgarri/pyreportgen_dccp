@@ -86,6 +86,81 @@ def QueryReg():
     return q
 
 
+#-----------------------------------------------------------#
+# Queri monto instituciones regional (QueryReg() como base) #
+#-----------------------------------------------------------#
+def queryInstitucionRegion():
+    q = '''
+        ;with temp as (
+                SELECT TPO.YEAR 'Ano'
+                    , tpo.Month as 'Mes'
+                    , LOC.Region
+                    , (CASE oc1.porisintegrated WHEN 3 THEN 'CAg'
+                            else (
+                                case  OC1.IDProcedenciaOC
+                                    WHEN 703 THEN 'Convenio Marco'
+                                    WHEN 701 THEN 'Licitación Pública'
+                                    WHEN 1401 THEN 'Licitación Pública'
+                                    WHEN 702 THEN 'Licitación Privada'
+                                    ELSE 'Trato Directo' 
+                                END)
+                        END) 'ProcedenciaOC'
+                    , I.NombreInstitucion
+                    ,case when a.idTamano is not null then cast(a.idTamano as nvarchar)
+                                else isnull(b.tamanonombre,'SinDato') end tamano0
+                    , COUNT(DISTINCT P.RUTSucursal)      'CantProveedores'
+                    , COUNT(DISTINCT OC1.CodigoOC) 'CantOC'    
+                    , SUM(OC1.MontoUSD+OC1.ImpuestoUSD) 'MONTOUSD'
+                    , SUM(OC1.MontoCLP+OC1.ImpuestoCLP) 'MONTOCLP'
+                    , SUM(OC1.MontoCLF+OC1.ImpuestoCLF) 'MONTOCLF'
+
+
+
+                FROM DM_Transaccional..THOrdenesCompra  AS OC1
+                inner JOIN DM_Transaccional..DimTiempo AS TPO                     ON OC1.IDFechaEnvioOC=TPO.DateKey
+                inner JOIN DM_Transaccional..DimProcedenciaOC AS PRO   ON PRO.IDProcedenciaOC = OC1.IDProcedenciaOC
+                left JOIN DM_Transaccional..DimComprador AS C        ON OC1.IDUnidaddeCompra = C.IDUnidaddeCompra
+                left JOIN DM_Transaccional..DimProveedor AS P        ON P.IDSucursal=OC1.IDSucursal
+                left join [DM_Transaccional].[dbo].[THTamanoProveedor] a on a.entcode=p.entCode and AñoTributario=2021
+                left join Estudios.dbo.TamanoProveedorNuevos20230802 b on p.entcode=b.entCode
+                LEFT JOIN  DM_Transaccional..DimTamanoProveedor AS TP ON TP.IdTamano=a.IdTamano
+                left JOIN DM_Transaccional..DimInstitucion AS I      ON C.entCode = I.entCode
+                left JOIN DM_Transaccional..DimSector AS S           ON S.IdSector = I.IdSector
+                left JOIN DM_Transaccional..DimLocalidad as loc      ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
+
+                --Dado que existe comparacion anual, debe tomarse con año 1 y año -1
+                WHERE   TPO.YEAR in(2023
+                                    --,2022
+                                    )
+                        AND TPO.MONTH >= 1 AND TPO.MONTH <= 8
+                GROUP BY TPO.YEAR,TPO.MONTH, 
+                case when a.idTamano is not null then cast(a.idTamano as nvarchar)
+                            else isnull(b.tamanonombre,'SinDato') end ,
+                            I.NombreInstitucion,  LOC.Region,
+                    (CASE OC1.porisintegrated WHEN 3 THEN 'CAg'
+                            else (case  OC1.IDProcedenciaOC
+                                            WHEN 703 THEN 'Convenio Marco'
+                                            WHEN 701 THEN 'Licitación Pública'
+                                            WHEN 1401 THEN 'Licitación Pública'
+                                            WHEN 702 THEN 'Licitación Privada'
+                                            ELSE 'Trato Directo' END)END)
+                )
+        Select 	Region
+                , NombreInstitucion
+                ,sum(MONTOUSD) MONTOUSD,
+                sum(MONTOCLF) MONTOCLF,
+                sum(MONTOCLP) MONTOCLP,
+                sum(CantOC) CantOC,
+                sum(CantProveedores)      'CantProveedores'
+        from	temp
+        group by	Region
+                    , NombreInstitucion
+        ORDER BY	Region
+                    , sum(MONTOUSD)
+        '''
+    return q
+
+
 #--------------------------------------------------------#
 # Query con datos a nivel nacional. Solo no tiene Region #
 #--------------------------------------------------------#
@@ -364,7 +439,7 @@ def queryOrdenCompraRegion():
                         DM_Transaccional.dbo.THOportunidadesNegocio.NombreAdq as NombreLic,
                         ISNULL(DM_Transaccional.dbo.THOportunidadesNegocio.NombreAdq, DM_Transaccional.dbo.THOrdenesCompra.NombreOC) as MotivoCompra,
                         round(DM_Transaccional.dbo.THOrdenesCompra.MontoUSD + DM_Transaccional.dbo.THOrdenesCompra.ImpuestoUSD,0) USD_BRUTO,
-                        DM_Transaccional.dbo.THOrdenesCompra.MontoCLP + DM_Transaccional.dbo.THOrdenesCompra.ImpuestoCLP PESOS_BRUTO,
+                        DM_Transaccional.dbo.THOrdenesCompra.MontoCLP + DM_Transaccional.dbo.THOrdenesCompra.ImpuestoCLP CLP_BRUTO,
                         Rank()
                         OVER (Partition BY DM_Transaccional.dbo.DimLocalidad.Region
                             ORDER BY DM_Transaccional.dbo.THOrdenesCompra.MontoUSD DESC ) AS Rank
