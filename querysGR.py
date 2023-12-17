@@ -3,6 +3,8 @@
 #################################
 
 
+#cabiar uso de parametros en query, del 'WHEN' a 'SET'
+
 #----------------------------------#
 # Query con datos a nivel regional #
 #----------------------------------#
@@ -156,7 +158,7 @@ def queryInstitucionRegion(mi, mf):
         group by	Region
                     , NombreInstitucion
         ORDER BY	Region
-                    , sum(MONTOUSD)
+                    , sum(MONTOUSD) DESC
         '''
     return q
 
