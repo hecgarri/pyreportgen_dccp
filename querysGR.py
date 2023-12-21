@@ -8,82 +8,92 @@
 #----------------------------------#
 # Query con datos a nivel regional #
 #----------------------------------#
-def QueryReg(mi, mf):
+def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
     q = '''
-        ;with temp as (
-        SELECT TPO.YEAR 'Ano'
-            , tpo.Month as 'Mes'
-            , LOC.Region
-        , (CASE oc1.porisintegrated WHEN 3 THEN 'CAg'
-                    else (case  OC1.IDProcedenciaOC
-                                    WHEN 703 THEN 'Convenio Marco'
-                                    WHEN 701 THEN 'Licitación Pública'
-                                    WHEN 1401 THEN 'Licitación Pública'
-                                    WHEN 702 THEN 'Licitación Privada'
-                                    ELSE 'Trato Directo' END)END) 'ProcedenciaOC'
-        , I.NombreInstitucion
-        ,case when a.idTamano is not null then cast(a.idTamano as nvarchar)
-                    else isnull(b.tamanonombre,'SinDato') end tamano0
-        ,  COUNT(DISTINCT P.RUTSucursal)      'CantProveedores'
-        , COUNT(DISTINCT OC1.CodigoOC) 'CantOC'    
-        , SUM(OC1.MontoUSD+OC1.ImpuestoUSD) 'MONTOUSD'
-        , SUM(OC1.MontoCLP+OC1.ImpuestoCLP) 'MONTOCLP'
-        , SUM(OC1.MontoCLF+OC1.ImpuestoCLF) 'MONTOCLF'
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+        SELECT	TPO.YEAR							'Ano'
+                ,loc.region							'Region'
+                , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD'
+                , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP'
+                , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF'
+                , count(oc.porid)					'OC'
+				-------------------
+				--HASTA AQUÍ BASE--
+				-------------------
+				, CASE TMN1.idTamano
+					WHEN 1 THEN 'Grande'
+					WHEN 2 THEN 'MiPyme'
+					WHEN 3 THEN 'MiPyme'
+					WHEN 4 THEN 'MiPyme'
+					WHEN 5 THEN 'MiPyme'
+					ELSE CASE TMNa.tamanonombre
+						WHEN 'Grande'THEN 'Grande'
+						ELSE 'MiPyme'
+					END
+				END							'Tamano'
+				, (CASE OC.porisintegrated
+					WHEN 3 THEN 'Compra Ágil'
+						else (case  OC.IDProcedenciaOC
+								WHEN 703 THEN 'Convenio Marco'
+								WHEN 701 THEN 'Licitación Pública'
+								WHEN 1401 THEN 'Licitación Pública'
+								WHEN 702 THEN 'Licitación Privada'
+								ELSE 'Trato Directo'
+							END)
+					END) 'Modalidad'
+                
+        FROM  
+            DM_Transaccional..THOrdenesCompra AS OC     
+            INNER JOIN DM_Transaccional..DimTiempo AS TPO           ON OC.IDFechaEnvioOC = TPO.DateKey 
+            LEFT JOIN DM_Transaccional..DimComprador AS COMP			ON OC.IDUnidaddeCompra = COMP.IDUnidaddeCompra 
+            LEFT JOIN DM_Transaccional..DimLocalidad	 AS LOC		ON COMP.IDLocalidadUnidaddeCompra = LOC.IDLocalidad
+				-------------------
+				--HASTA AQUÍ BASE--
+				-------------------
 
+			LEFT JOIN DM_Transaccional..DimProveedor AS PROV			ON PROV.IDSucursal=OC.IDSucursal
+			LEFT JOIN DM_Transaccional.dbo.THTamanoProveedor AS TMN1		ON TMN1.entcode = PROV.entCode AND AñoTributario=2021
+			LEFT JOIN Estudios.dbo.TamanoProveedorNuevos20230802 AS TMNa	ON PROV.entcode = TMNa.entCode
 
+			
+            /*LEFT JOIN DM_Transaccional..DimInstitucion AS I		ON C.entCode = I.entCode   
+            LEFT JOIN DM_Transaccional..DimSector AS S				ON S.IdSector = I.IdSector
 
-        FROM DM_Transaccional..THOrdenesCompra  AS OC1
-        inner JOIN DM_Transaccional..DimTiempo AS TPO                     ON OC1.IDFechaEnvioOC=TPO.DateKey
-        inner JOIN DM_Transaccional..DimProcedenciaOC AS PRO   ON PRO.IDProcedenciaOC = OC1.IDProcedenciaOC
-        left JOIN DM_Transaccional..DimComprador AS C        ON OC1.IDUnidaddeCompra = C.IDUnidaddeCompra
-        left JOIN DM_Transaccional..DimProveedor AS P        ON P.IDSucursal=OC1.IDSucursal
-        left join [DM_Transaccional].[dbo].[THTamanoProveedor] a on a.entcode=p.entCode and AñoTributario=2021
-        left join Estudios.dbo.TamanoProveedorNuevos20230802 b on p.entcode=b.entCode
-        LEFT JOIN  DM_Transaccional..DimTamanoProveedor AS TP ON TP.IdTamano=a.IdTamano
-        left JOIN DM_Transaccional..DimInstitucion AS I      ON C.entCode = I.entCode
-        left JOIN DM_Transaccional..DimSector AS S           ON S.IdSector = I.IdSector
-        left JOIN DM_Transaccional..DimLocalidad as loc      ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
+			LEFT JOIN DM_Transaccional..DimTamanoProveedor AS TP	ON TP.IdTamano=a.IdTamano*/
+			
+        WHERE   TPO.YEAR in (2023)
+            AND		TPO.MONTH>= @MESI
+            AND     TPO.MONTH<= @MESF
+        GROUP BY  Region
+				,TPO.YEAR				
+				-------------------
+				--HASTA AQUÍ BASE--
+				-------------------
+				,CASE TMN1.idTamano
+					WHEN 1 THEN 'Grande'
+					WHEN 2 THEN 'MiPyme'
+					WHEN 3 THEN 'MiPyme'
+					WHEN 4 THEN 'MiPyme'
+					WHEN 5 THEN 'MiPyme'
+					ELSE CASE TMNa.tamanonombre
+						WHEN 'Grande'THEN 'Grande'
+						ELSE 'MiPyme'
+					END
+				END			
+				, (CASE OC.porisintegrated
+					WHEN 3 THEN 'Compra Ágil'
+						else (case  OC.IDProcedenciaOC
+								WHEN 703 THEN 'Convenio Marco'
+								WHEN 701 THEN 'Licitación Pública'
+								WHEN 1401 THEN 'Licitación Pública'
+								WHEN 702 THEN 'Licitación Privada'
+								ELSE 'Trato Directo'
+							END)
+					END)
 
-        --Dado que existe comparacion anual, debe tomarse con año 1 y año -1
-        WHERE   TPO.YEAR in(2023,2022)
-                AND TPO.MONTH >= ''' +str(mi)+ ''' AND TPO.MONTH <= ''' +str(mf)+ '''
-        GROUP BY TPO.YEAR,TPO.MONTH, 
-        case when a.idTamano is not null then cast(a.idTamano as nvarchar)
-                    else isnull(b.tamanonombre,'SinDato') end ,
-                    I.NombreInstitucion,  LOC.Region,
-            (CASE OC1.porisintegrated WHEN 3 THEN 'CAg'
-                    else (case  OC1.IDProcedenciaOC
-                                    WHEN 703 THEN 'Convenio Marco'
-                                    WHEN 701 THEN 'Licitación Pública'
-                                    WHEN 1401 THEN 'Licitación Pública'
-                                    WHEN 702 THEN 'Licitación Privada'
-                                    ELSE 'Trato Directo' END)END)
-        )
-        Select 		Ano
-
-            , Mes
-            , Region
-        ,  ProcedenciaOC
-        , NombreInstitucion
-        ,case  when tamano0 in ('PYME','Microempresa','2','3','4') then 'MiPyme'
-                    when tamano0 in ('Grande','1') then 'Grande'
-                    when tamano0  in ('5','Extranjera','SinDato') then 'SinDato' 
-                        end Tamano,
-                sum(MONTOUSD) MONTOUSD,
-                sum(MONTOCLF) MONTOCLF,
-                sum(MONTOCLP) MONTOCLP,
-                sum(CantOC) CantOC,
-                sum(CantProveedores)      'CantProveedores'
-        from temp
-        group by 	Ano   
-            , Mes
-            , Region
-        ,  ProcedenciaOC
-        , NombreInstitucion
-        , case  when tamano0 in ('PYME','Microempresa','2','3','4') then 'MiPyme'
-                    when tamano0 in ('Grande','1') then 'Grande'
-                    when tamano0  in ('5','Extranjera','SinDato') then 'SinDato' 
-                        end
+		ORDER BY Region
         '''
     return q
 
@@ -93,11 +103,14 @@ def QueryReg(mi, mf):
 #-----------------------------------------------------------#
 def queryInstitucionRegion(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
         ;with temp as (
                 SELECT TPO.YEAR 'Ano'
                     , tpo.Month as 'Mes'
                     , LOC.Region
-                    , (CASE oc1.porisintegrated WHEN 3 THEN 'CAg'
+                    , (CASE oc1.porisintegrated WHEN 3 THEN 'Compra Ágil'
                             else (
                                 case  OC1.IDProcedenciaOC
                                     WHEN 703 THEN 'Convenio Marco'
@@ -134,12 +147,12 @@ def queryInstitucionRegion(mi, mf):
                 WHERE   TPO.YEAR in(2023
                                     --,2022
                                     )
-                        AND TPO.MONTH >= ''' +str(mi)+ ''' AND TPO.MONTH <= ''' +str(mf)+ '''
+                        AND TPO.MONTH >= @MESI AND TPO.MONTH <= @MESF
                 GROUP BY TPO.YEAR,TPO.MONTH, 
                 case when a.idTamano is not null then cast(a.idTamano as nvarchar)
                             else isnull(b.tamanonombre,'SinDato') end ,
                             I.NombreInstitucion,  LOC.Region,
-                    (CASE OC1.porisintegrated WHEN 3 THEN 'CAg'
+                    (CASE OC1.porisintegrated WHEN 3 THEN 'Compra Ágil'
                             else (case  OC1.IDProcedenciaOC
                                             WHEN 703 THEN 'Convenio Marco'
                                             WHEN 701 THEN 'Licitación Pública'
@@ -168,6 +181,9 @@ def queryInstitucionRegion(mi, mf):
 #--------------------------------------------------------#
 def QueryTotal(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
         ;with temp as (
             SELECT TPO.YEAR 'Ano' --TPO.MONTHNAME 'Mes'
             , tpo.Month as 'Mes'
@@ -201,7 +217,7 @@ def QueryTotal(mi, mf):
             
             --Dado que existe comparacion anual, debe tomarse con año 1 y año -1
             WHERE   TPO.YEAR in(2023,2022)
-                    AND TPO.MONTH >= ''' +str(mi)+ ''' AND TPO.MONTH <= ''' +str(mf)+ '''
+                    AND TPO.MONTH >= @MESI AND TPO.MONTH <= @MESF
             GROUP BY TPO.YEAR,TPO.MONTH, TP.Tamano,
             case when a.idTamano is not null then cast(a.idTamano as nvarchar)
                         else isnull(b.tamanonombre,'SinDato') end ,
@@ -246,10 +262,13 @@ def QueryTotal(mi, mf):
 #-------------------------------------------------#
 def queryTotalRegion(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
         SELECT		TPO.YEAR 'Año'
                     ,loc.region 'Region'
-                    , SUM(OC.MontoUSD+OC.ImpuestoUSD)/1000000 'Monto_Bruto_USD'
-                    , SUM(OC.MontoCLP+OC.ImpuestoCLP)/1000000 'Monto_Bruto_CLP'
+                    , SUM(OC.MontoUSD+OC.ImpuestoUSD) 'Monto_Bruto_USD'
+                    , SUM(OC.MontoCLP+OC.ImpuestoCLP) 'Monto_Bruto_CLP'
                     ,count(oc.porid) CantOC
                 
         FROM  
@@ -262,8 +281,8 @@ def queryTotalRegion(mi, mf):
             left JOIN DM_Transaccional..DimLocalidad as loc			ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
 
         WHERE   TPO.YEAR in (2023)
-            AND		TPO.MONTH>=''' +str(mi)+ '''
-            AND     TPO.MONTH<=''' +str(mf)+ '''
+            AND		TPO.MONTH>= @MESI
+            AND     TPO.MONTH<= @MESF
         GROUP BY  Region,
                     TPO.YEAR
             --SECTOR
@@ -272,8 +291,8 @@ def queryTotalRegion(mi, mf):
 
         SELECT		TPO.YEAR 'Año'
                     ,loc.region collate Modern_Spanish_CI_AS 'Region'
-                    ,SUM(OC.MontoUSD+OC.ImpuestoUSD)/1000000 'Monto_Bruto_USD'
-                    ,SUM(OC.MontoCLP+OC.ImpuestoCLP)/1000000 'Monto_Bruto_CLP'
+                    ,SUM(OC.MontoUSD+OC.ImpuestoUSD) 'Monto_Bruto_USD'
+                    ,SUM(OC.MontoCLP+OC.ImpuestoCLP) 'Monto_Bruto_CLP'
                     ,count(oc.porid) CantOC
                 
         FROM  
@@ -286,8 +305,8 @@ def queryTotalRegion(mi, mf):
             left JOIN [10.34.71.227].DM_Transaccional_2022.DBO.DimLocalidad as loc			ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
 
         WHERE   TPO.YEAR in (2022)
-            AND		TPO.MONTH>=''' +str(mi)+ '''
-            AND     TPO.MONTH<=''' +str(mf)+ '''
+            AND		TPO.MONTH>= @MESI
+            AND     TPO.MONTH<= @MESF
         GROUP BY  Region
                 ,TPO.YEAR
 
@@ -302,6 +321,10 @@ def queryTotalRegion(mi, mf):
 #------------------------------------------------#
 def querySectorRegion(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
         SELECT 	loc.region,
             Sector,
             SUM(OC.MontoUSD+OC.ImpuestoUSD) 'Monto_Bruto_USD',
@@ -317,8 +340,8 @@ def querySectorRegion(mi, mf):
             left JOIN DM_Transaccional..DimLocalidad as loc			ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
 
         WHERE   TPO.YEAR in (2023) 
-            AND TPO.MONTH >=''' +str(mi)+ '''
-            AND	TPO.MONTH <=''' +str(mf)+ '''
+            AND TPO.MONTH >= @MESI
+            AND	TPO.MONTH <= @MESF
         GROUP BY  Region,
             SECTOR
         order by Region,
@@ -333,6 +356,9 @@ def querySectorRegion(mi, mf):
 #-----------------------------------------------#
 def queryRubroRegion(mi, mf):
     q = ''' 
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
         select * 
         from( select
         LOC.Region
@@ -356,7 +382,7 @@ def queryRubroRegion(mi, mf):
             LEFT JOIN DM_Transaccional..DimRubro rubro on rubro.IdRubro=produc.IdRubro
             --Dado que existe comparacion anual, debe tomarse con año 1 y año -1
             WHERE   TPO.YEAR = 2023
-                AND  TPO.month between ''' +str(mi)+ ''' and ''' +str(mf)+ '''
+                AND  TPO.month between @MESI and @MESF
             GROUP BY LOC.Region,rubro.RubroN1
                     )rs WHERE Rank <= 3 ORDER BY Region ASC, Rank ASC 
         '''
@@ -368,10 +394,11 @@ def queryRubroRegion(mi, mf):
 #-----------------------------------------#
 def queryCompraAgilRegion(mi, mf):
     q = '''
-        DECLARE @ANO Int
-        DECLARE @ANOM1 Int
+        DECLARE @ANO Int,  @ANOM1 Int, @MESI INT, @MESF  INT
         SET @ANO = 2023
         SET @ANOM1 = @ANO - 1
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
 
         SELECT	@ANO 'Ano',
                 loc.Region 'Region',
@@ -384,8 +411,8 @@ def queryCompraAgilRegion(mi, mf):
                 inner join [dm_transaccional]..diminstitucion i		on i.entcode=c.entCode 
                 inner JOIN dm_transaccional..DimLocalidad as loc	ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
         WHERE   TPO.YEAR in (@ANO) 
-                AND    TPO.MONTH >= ''' +str(mi)+ '''
-                AND    TPO.MONTH <= ''' +str(mf)+ '''-- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
+                AND    TPO.MONTH >= @MESI
+                AND    TPO.MONTH <= @MESF-- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
                 and oc.porIsIntegrated=3
         group by loc.Region
 
@@ -402,8 +429,8 @@ def queryCompraAgilRegion(mi, mf):
                 inner join [10.34.71.227].DM_Transaccional_2022.DBO.diminstitucion i		on i.entcode=c.entCode 
                 inner JOIN [10.34.71.227].DM_Transaccional_2022.DBO.DimLocalidad as loc		ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
         WHERE   TPO.YEAR in (@ANOM1) 
-                AND    TPO.MONTH >= ''' +str(mi)+ '''
-                AND    TPO.MONTH <= ''' +str(mf)+ '''-- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
+                AND    TPO.MONTH >= @MESI
+                AND    TPO.MONTH <= @MESF-- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
                 and oc.porIsIntegrated=3
         group by loc.Region              
 
@@ -418,8 +445,10 @@ def queryCompraAgilRegion(mi, mf):
 #-------------------------#
 def queryOrdenCompraRegion(top, mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
         SELECT *
-
             FROM (
                 SELECT 
                         case 
@@ -461,7 +490,7 @@ def queryOrdenCompraRegion(top, mi, mf):
                         left join Estudios.dbo.TamanoProveedorNuevos20230809 b on [DM_Transaccional].[dbo].[dimproveedor].entcode=b.entCode
                 
                 where	DM_Transaccional.dbo.dimtiempo.Year = 2023
-                        and DM_Transaccional.dbo.dimtiempo.month between '''+ str(mi) +''' and '''+ str(mf) +'''
+                        and DM_Transaccional.dbo.dimtiempo.month between @MESI and @MESF
                 ) rs
 
             WHERE Rank <= ''' +str(top)+ '''
@@ -471,15 +500,51 @@ def queryOrdenCompraRegion(top, mi, mf):
     return q
 
 
+#---------------------------------------------#
+# Query Proveedores Regiones(reg compradores) #
+#---------------------------------------------#
+def queryProveedoresRegiones(mi, mf):
+    q = '''
+        DECLARE @MESI INT, @MESF  INT, @ANO Int, @ANOM1 Int
+        SET @ANO = 2023
+        SET @ANOM1 = @ANO - 1
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
+        SELECT @ANO 'Ano', 
+				Loc.Region,
+				Prov.RazonSocialSucursal,
+				Prov.RUTSucursal,
+                SUM(OC.MontoCLF+OC.ImpuestoCLF) 'CLF', 
+                SUM(OC.MontoUSD+OC.ImpuestoUSD) 'USD',
+                SUM(OC.MontoCLP+OC.ImpuestoCLP) 'CLP', 
+                COUNT(OC.MontoCLF) 'CANTIDADOC'	
+
+        FROM	DM_Transaccional..THOrdenesCompra AS OC INNER JOIN 
+                DM_Transaccional..DimTiempo AS TPO	ON OC.IDFechaEnvioOC=TPO.DateKey LEFT JOIN
+				DM_Transaccional.dbo.DimProveedor AS Prov ON OC.IDSucursal = Prov.IDSucursal LEFT JOIN
+				DM_Transaccional.dbo.DimComprador AS Comp ON OC.IDUnidaddeCompra = Comp.IDUnidaddeCompra LEFT JOIN
+				DM_Transaccional.dbo.DimLocalidad AS Loc ON Loc.IDLocalidad = Comp.IDLocalidadUnidaddeCompra
+				WHERE   TPO.YEAR in (@ANO) -- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
+                AND tpo.Month >= @MESI
+                AND tpo.Month <= @MESF
+		
+		GROUP BY Region, Prov.RUTSucursal, Prov.RazonSocialSucursal
+        ORDER BY ANO DESC, Loc.Region, SUM(OC.MontoUSD+OC.ImpuestoUSD) DESC, Prov.RUTSucursal
+        '''
+    return q
+
+
 #--------------------------#
 # Query Totales Nacionales #
 #--------------------------#
 def QueryTotalesNacionales(mi, mf):
     q = '''
-        DECLARE @ANO Int
-        DECLARE @ANOM1 Int
+        DECLARE @MESI INT, @MESF  INT, @ANO Int, @ANOM1 Int
         SET @ANO = 2023
         SET @ANOM1 = @ANO - 1
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
 
         SELECT @ANO 'ANO', 
                 SUM(OC.MontoCLF+OC.ImpuestoCLF) 'MONTOCLF', 
@@ -489,7 +554,8 @@ def QueryTotalesNacionales(mi, mf):
         FROM DM_Transaccional..THOrdenesCompra AS OC LEFT JOIN 
                 DM_Transaccional..DimTiempo AS TPO	ON OC.IDFechaEnvioOC=TPO.DateKey 
         WHERE   TPO.YEAR in (@ANO) -- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
-                AND tpo.Month <=8
+                AND tpo.Month >= @MESI
+                AND tpo.Month <= @MESF
 
         UNION
 
@@ -501,8 +567,8 @@ def QueryTotalesNacionales(mi, mf):
         FROM [10.34.71.227].DM_Transaccional_2022.dbo.THOrdenesCompra AS OC LEFT JOIN 
                 [10.34.71.227].DM_Transaccional_2022.dbo.DimTiempo AS TPO    ON OC.IDFechaEnvioOC=TPO.DateKey 
         WHERE   TPO.YEAR in (@ANOM1) -- and (oc.OCEXCEPCIONAL=0 or oc.OCEXCEPCIONAL is null ) 
-                AND tpo.Month >= '''+ str(mi) +'''
-                AND tpo.Month <= '''+ str(mf) +'''
+                AND tpo.Month >= @MESI
+                AND tpo.Month <= @MESF
 
         ORDER BY ANO DESC
         '''
@@ -514,6 +580,10 @@ def QueryTotalesNacionales(mi, mf):
 #------------------------#
 def QueryOrgnismosPublicoNacional(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
         SELECT TOP 3
         i.entCode,
         NombreInstitucion Institución,
@@ -528,8 +598,8 @@ def QueryOrgnismosPublicoNacional(mi, mf):
         left JOIN DM_Transaccional..DimLocalidad as loc	  ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
         where
         t.Year in (2023)
-        AND T.MONTH >= '''+ str(mi) +'''
-        AND T.MONTH <= '''+ str(mf) +'''
+        AND T.MONTH >= @MESI
+        AND T.MONTH <= @MESF
         group by
         i.entcode, NombreInstitucion
         order by sum(MontoUSD + ImpuestoUSD) desc, entCode
@@ -542,6 +612,10 @@ def QueryOrgnismosPublicoNacional(mi, mf):
 #----------------------------------------------#
 def QuerySectorNacional(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
         SELECT 	Sector
                 , SUM(OC.MontoUSD+OC.ImpuestoUSD) 'Monto_Bruto_USD'
                 , SUM(OC.MontoCLP+OC.ImpuestoCLP) 'Monto_Bruto_CLP'
@@ -554,8 +628,8 @@ def QuerySectorNacional(mi, mf):
             LEFT JOIN DM_Transaccional..DimSector AS S				ON S.IdSector = I.IdSector
 
         WHERE   TPO.YEAR in (2023) 
-            AND	TPO.MONTH >= '''+ str(mi) +'''
-            AND	TPO.MONTH <= '''+ str(mf) +'''
+            AND	TPO.MONTH >= @MESI
+            AND	TPO.MONTH <= @MESF
 
         GROUP BY  SECTOR
 
@@ -569,6 +643,10 @@ def QuerySectorNacional(mi, mf):
 #----------------------------------------------#
 def QueryTotalProveedoresNacional(mi, mf):
     q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
         SELECT       
                 case 
                     when a.idTamano is not null then 
@@ -594,7 +672,7 @@ def QueryTotalProveedoresNacional(mi, mf):
                 left join   [DM_Transaccional].[dbo].[THTamanoProveedor] a on a.entcode=p.entCode and AñoTributario=2021
                 left join Estudios.dbo.TamanoProveedorNuevos20230809 b on p.entcode=b.entCode
 
-        WHERE   TPO.YEAR in (2023) and TPO.MONTH >= '''+ str(mi) +''' AND TPO.MONTH <= '''+ str(mf) +'''
+        WHERE   TPO.YEAR in (2023) and TPO.MONTH >= @MESI AND TPO.MONTH <= @MESO
 
         group by case 
                     when a.idTamano is not null then 
@@ -623,18 +701,74 @@ def queryRegiones():
     return q
 
 
-def queriSinRevisar(): #está acá para que no se pierda
+#------------------------------------#
+# Query Cantidad Proveedores Aquiles #
+#------------------------------------#
+
     # ###########################################################################
     # ### Query para obtener número total de proveedores que participan en MP ###
     # ###########################################################################
+    # QProv = pd.read_sql(con = conn_AQ, params= FechaProv2, sql = '''
+    
+    #    /*Proveedores involucrados en una OC*/
+    #    SELECT DISTINCT C.entCode AS Transan
+    #    FROM         
+    #    DCCPProcurement..prcPOHeader A with(nolock)INNER JOIN
+    #    DCCPPlatform..gblOrganization B with(nolock) ON A.porSellerOrganization = B.orgCode INNER JOIN
+    #    DCCPPlatform..gblEnterprise C with(nolock) ON B.orgEnterprise = C.entCode
+    #    WHERE     (A.porBuyerStatus IN (4, 5, 6, 7, 12)) 
+    #    AND year(A.porSendDate) =  ? 
+    #    and ( month(A.porSendDate)>= ? AND month(A.porSendDate)<= ? )
+       
+    #    UNION 
+       
+    #    /*Proveedores que han participado emitiendo una oferta*/
+       
+    #    SELECT DISTINCT C.orgEnterprise as Transan
+    #    FROM         
+    #    DCCPProcurement..prcBIDQuote A with(nolock)INNER JOIN
+    #    DCCPProcurement..prcRFBHeader B with(nolock) ON A.bidRFBCode = B.rbhCode INNER JOIN
+    #    DCCPPlatform..gblOrganization C with(nolock) ON A.bidOrganization = C.orgCode
+    #    WHERE     (A.bidDocumentStatus IN (3, 4, 5)) 
+    #    AND year(A.bidEconomicIssueDate) = ? 
+    #    and (month(A.bidEconomicIssueDate)>= ? AND month(A.bidEconomicIssueDate)<= ? )
+    
+    #    UNION
+       
+    #    /*Proveedores a los que se les ha solicitado una cotización*/
+       
+    #    SELECT  DISTINCT (B.orgEnterprise) AS Transan     
+    #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A
+    #      INNER JOIN DCCPPlatform..gblOrganization B ON
+    #      A.proveedorRut=B.orgTaxID INNER JOIN
+    #      DCCPProcurement..prcPOHeader C ON
+    #      A.porId = C.porID
+    #      WHERE year(C.porSendDate) = ? 
+    #    and (month(C.porSendDate)>= ? AND month(C.porSendDate)<= ?)
+       
+    #    UNION
+    #    /*MÁS LOS RUT NO REGISTRADOS EN MERCADO PÚBLICO Y QUE SON DEL PERÍODO DE REFERENCIA*/
+       
+    #    SELECT  
+    #    DISTINCT A.proveedorRut   
+    #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A INNER JOIN
+    #       DCCPProcurement..prcPOHeader C ON
+    #      A.porId = C.porID
+    #      WHERE A.proveedorRut NOT IN (
+    #    SELECT  
+    #    DISTINCT A.proveedorRut     
+    #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A
+    #      INNER  JOIN DCCPPlatform..gblOrganization B ON
+    #      A.proveedorRut=B.orgTaxID) AND 
+    #      year(C.porSendDate) = ? and 
+    #      (month(C.porSendDate)>= ? AND month(C.porSendDate)<= ?)''')
 
-    # ##Calculando fecha para query dinamica
-    # FechaProv =  FechaQ.drop(FechaQ.index[1])
-    # ##Proveedores solo transando
-    # print('Proveedores transando en MP.','Inputs:\n')
-    # print(FechaProv)
-    # print()
-    # #vec=['2023','1','6'] ### vector de parametros para usar con con=conn_AQ_pyodbc
+    ####  ESTA ES EL OUTPUT DE LA QUERY ANTERIOR PERO YA EJECUTADA EN SQL SERVER, PORQUE LA ANTERIOR DEMORA MUCHO ####
+    #
+    # QProv=pd.read_sql(con=conn_AQ, sql='''
+    #     SELECT *
+    #     FROM estudios.dbo.ProveedoresTransando20230811
+    #     ''')
 
     # QProvTrans = pd.read_sql(con = conn_AQ,  sql = '''
     # SELECT DISTINCT C.entCode AS Transan
@@ -646,93 +780,4 @@ def queriSinRevisar(): #está acá para que no se pierda
     # AND year(A.porSendDate) =  2023 
     # and (month(A.porSendDate)>=1 AND month(A.porSendDate)<= 8 )
     # ''')
-    # print(QProvTrans)
-    # print()
-    # print('--------------------------------------------------------------------------------------------------------------------------------------------------------------------')
-    # print()
-    # #sys.exit()
-
-    # #FechaProv2=pd.concat([FechaProv],ignore_index=True) #,FechaProv,FechaProv,FechaProv], ignore_index=True) # For conn_AQ connection using
-    # #print()
-    # #
-    # #vec2=[] # vector de parametros para conn_AQ_pyodbc
-    # #for k in range(1):
-    # #    vec2.append(vec[0])
-    # #    vec2.append(vec[1])
-    # #    vec2.append(vec[2])
-    # #
-    # #
-    # #QProv = pd.read_sql(con = conn_AQ, params= FechaProv2, sql = '''
-    # #
-    # #    /*Proveedores involucrados en una OC*/
-    # #    SELECT DISTINCT C.entCode AS Transan
-    # #    FROM         
-    # #    DCCPProcurement..prcPOHeader A with(nolock)INNER JOIN
-    # #    DCCPPlatform..gblOrganization B with(nolock) ON A.porSellerOrganization = B.orgCode INNER JOIN
-    # #    DCCPPlatform..gblEnterprise C with(nolock) ON B.orgEnterprise = C.entCode
-    # #    WHERE     (A.porBuyerStatus IN (4, 5, 6, 7, 12)) 
-    # #    AND year(A.porSendDate) =  ? 
-    # #    and ( month(A.porSendDate)>= ? AND month(A.porSendDate)<= ? )
-    # #    
-    # #    UNION 
-    # #    
-    # #    /*Proveedores que han participado emitiendo una oferta*/
-    # #    
-    # #    SELECT DISTINCT C.orgEnterprise as Transan
-    # #    FROM         
-    # #    DCCPProcurement..prcBIDQuote A with(nolock)INNER JOIN
-    # #    DCCPProcurement..prcRFBHeader B with(nolock) ON A.bidRFBCode = B.rbhCode INNER JOIN
-    # #    DCCPPlatform..gblOrganization C with(nolock) ON A.bidOrganization = C.orgCode
-    # #    WHERE     (A.bidDocumentStatus IN (3, 4, 5)) 
-    # #    AND year(A.bidEconomicIssueDate) = ? 
-    # #    and (month(A.bidEconomicIssueDate)>= ? AND month(A.bidEconomicIssueDate)<= ? )
-    # #
-    # #    UNION
-    # #    
-    # #    /*Proveedores a los que se les ha solicitado una cotización*/
-    # #    
-    # #    SELECT  DISTINCT (B.orgEnterprise) AS Transan     
-    # #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A
-    # #      INNER JOIN DCCPPlatform..gblOrganization B ON
-    # #      A.proveedorRut=B.orgTaxID INNER JOIN
-    # #      DCCPProcurement..prcPOHeader C ON
-    # #      A.porId = C.porID
-    # #      WHERE year(C.porSendDate) = ? 
-    # #    and (month(C.porSendDate)>= ? AND month(C.porSendDate)<= ?)
-    # #    
-    # #    UNION
-    # #    /*MÁS LOS RUT NO REGISTRADOS EN MERCADO PÚBLICO Y QUE SON DEL PERÍODO DE REFERENCIA*/
-    # #    
-    # #    SELECT  
-    # #    DISTINCT A.proveedorRut   
-    # #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A INNER JOIN
-    # #       DCCPProcurement..prcPOHeader C ON
-    # #      A.porId = C.porID
-    # #      WHERE A.proveedorRut NOT IN (
-    # #    SELECT  
-    # #    DISTINCT A.proveedorRut     
-    # #      FROM [DCCPProcurement].[dbo].[prcPOCotizacion] A
-    # #      INNER  JOIN DCCPPlatform..gblOrganization B ON
-    # #      A.proveedorRut=B.orgTaxID) AND 
-    # #      year(C.porSendDate) = ? and 
-    # #      (month(C.porSendDate)>= ? AND month(C.porSendDate)<= ?)''')
-    # #
-    # ##Query total proveedores que participaron (No solo tienen OC asociada) Pedir a Javier
-    # #print(QProv)
-    # #print()
-    # #print('--------------------------------------------------------------------------------------------------------------------------------------------------------------------')
-    # #print()
-    # ##sys.exit()
-
-
-    # ####  ESTA ES EL OUTPUT DE LA QUERY ANTERIOR PERO YA EJECUTADA EN SQL SERVER, PORQUE LA ANTERIOR DEMORA MUCHO ####
-    # QProv=pd.read_sql(con=conn_AQ, sql='''
-    #     SELECT *
-    #     FROM estudios.dbo.ProveedoresTransando20230811
-    #     ''')
-    # print(QProv)
-    # print()
-    # print('--------------------------------------------------------------------------------------------------------------------------------------------------------------------')
-    # print()
-    # #sys.exit()
-    return 27
+ 
