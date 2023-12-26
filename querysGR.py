@@ -5,20 +5,21 @@
 
 #cabiar uso de parametros en query, del 'WHEN' a 'SET'
 
-#----------------------------------#
-# Query con datos a nivel regional #
-#----------------------------------#
-def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
+#0000----------------------------------#
+#0000 Query con datos a nivel regional #
+#0000----------------------------------#
+def theQueryReg(mi, mf): #Tiene Tamaño, Modalidad, Institución
     q = '''
-        DECLARE @MESI INT, @MESF  INT
+		DECLARE @MESI INT, @MESF  INT
         SET @MESI = ''' +str(mi)+ '''
         SET @MESF = ''' +str(mf)+ '''
+
         SELECT	TPO.YEAR							'Ano'
                 ,loc.region							'Region'
                 , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD'
                 , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP'
                 , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF'
-                , count(oc.porid)					'OC'
+                , count(OC.porid)					'OC'
 				-------------------
 				--HASTA AQUÍ BASE--
 				-------------------
@@ -32,7 +33,7 @@ def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
 						WHEN 'Grande'THEN 'Grande'
 						ELSE 'MiPyme'
 					END
-				END							'Tamano'
+				END							'Tmn'
 				, (CASE OC.porisintegrated
 					WHEN 3 THEN 'Compra Ágil'
 						else (case  OC.IDProcedenciaOC
@@ -42,8 +43,16 @@ def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
 								WHEN 702 THEN 'Licitación Privada'
 								ELSE 'Trato Directo'
 							END)
-					END) 'Modalidad'
+					END) 'Mod'
+				,INS.NombreInstitucion 'Ins'
+				,PROV.RazonSocialSucursal 'Prv' --NombreSucursal
+				,PROV.RUTSucursal	'PrvID'
+				,OC.CodigoOC 'OCod'
+				,OC.Link 'OLink'
+				,ISNULL(LIC.NombreAdq, OC.NombreOC) 'Mtv'
+				,SEC.Sector 'Sec'
                 
+--------------------------------------------------------------------------------
         FROM  
             DM_Transaccional..THOrdenesCompra AS OC     
             INNER JOIN DM_Transaccional..DimTiempo AS TPO           ON OC.IDFechaEnvioOC = TPO.DateKey 
@@ -54,18 +63,19 @@ def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
 				-------------------
 
 			LEFT JOIN DM_Transaccional..DimProveedor AS PROV			ON PROV.IDSucursal=OC.IDSucursal
-			LEFT JOIN DM_Transaccional.dbo.THTamanoProveedor AS TMN1		ON TMN1.entcode = PROV.entCode AND AñoTributario=2021
-			LEFT JOIN Estudios.dbo.TamanoProveedorNuevos20230802 AS TMNa	ON PROV.entcode = TMNa.entCode
-
+			LEFT JOIN DM_Transaccional..THTamanoProveedor AS TMN1		ON TMN1.entcode = PROV.entCode AND AñoTributario=2021
+			LEFT JOIN Estudios..TamanoProveedorNuevos20230802 AS TMNa	ON PROV.entcode = TMNa.entCode
+            LEFT JOIN DM_Transaccional..DimInstitucion AS INS      ON COMP.entCode = INS.entCode
+			LEFT JOIN DM_Transaccional.dbo.THOportunidadesNegocio AS LIC ON OC.rbhCode = LIC.rbhCode
+            LEFT JOIN DM_Transaccional..DimSector AS SEC		ON SEC.IdSector = INS.IdSector
 			
-            /*LEFT JOIN DM_Transaccional..DimInstitucion AS I		ON C.entCode = I.entCode   
-            LEFT JOIN DM_Transaccional..DimSector AS S				ON S.IdSector = I.IdSector
+		
 
-			LEFT JOIN DM_Transaccional..DimTamanoProveedor AS TP	ON TP.IdTamano=a.IdTamano*/
-			
+--------------------------------------------------			
         WHERE   TPO.YEAR in (2023)
-            AND		TPO.MONTH>= @MESI
-            AND     TPO.MONTH<= @MESF
+            AND	TPO.MONTH>= @MESI
+            AND TPO.MONTH<= @MESF
+
         GROUP BY  Region
 				,TPO.YEAR				
 				-------------------
@@ -92,8 +102,15 @@ def theQueryReg(mi, mf): #Tiene Tamaño y Modalidad
 								ELSE 'Trato Directo'
 							END)
 					END)
-
-		ORDER BY Region
+				,INS.NombreInstitucion
+				,PROV.RazonSocialSucursal
+				,PROV.RUTSucursal
+				,OC.CodigoOC 
+				,OC.Link 
+				,ISNULL(LIC.NombreAdq, OC.NombreOC)
+				,SEC.Sector
+				
+		ORDER BY Region, TPO.Year
         '''
     return q
 
@@ -351,40 +368,40 @@ def querySectorRegion(mi, mf):
     return q
 
 
-#-----------------------------------------------#
-# Montos totales transados por rubro por región #
-#-----------------------------------------------#
-def queryRubroRegion(mi, mf):
+#oooo-----------------------------------------------#
+#oooo Montos totales transados por rubro por región #
+#oooo-----------------------------------------------#
+def queryRubroRegion(mi, mf, top): # No cuuenta OC al dividir necesariamente por item comprado
     q = ''' 
-        DECLARE @MESI INT, @MESF  INT
+        DECLARE @MESI INT, @MESF  INT, @TOP INT
         SET @MESI = ''' +str(mi)+ '''
         SET @MESF = ''' +str(mf)+ '''
-        select * 
-        from( select
-        LOC.Region
-        ,rubro.RubroN1
-        ,SUM(OCL.MontoUSD) 'MONTOUSD'
-        , SUM(OCL.MontoCLP) 'MONTOCLP'
-        , SUM(OCL.MontoCLF) 'MONTOCLF'
-        , Rank() over (Partition BY LOC.Region ORDER BY  SUM(OCL.MontoUSD) DESC ) AS Rank
-            FROM  
-            DM_Transaccional..THOrdenesCompra AS OC     
-            LEFT JOIN DM_Transaccional..DimTiempo AS TPO                     ON OC.IDFechaEnvioOC=TPO.DateKey 
-            LEFT JOIN DM_Transaccional..DimProcedenciaOC AS PRO   ON PRO.IDProcedenciaOC = OC.IDProcedenciaOC
-            INNER JOIN DM_Transaccional..DimComprador AS C        ON OC.IDUnidaddeCompra = C.IDUnidaddeCompra
-            INNER JOIN DM_Transaccional..DimProveedor AS P        ON P.IDSucursal=OC.IDSucursal
-            --LEFT JOIN  DM_Transaccional..DimTamanoProveedor AS TP ON TP.IdTamano=P.IdTamano
-            INNER JOIN DM_Transaccional..DimInstitucion AS I      ON C.entCode = I.entCode   
-            INNER JOIN DM_Transaccional..DimSector AS S           ON S.IdSector = I.IdSector
-            INNER JOIN DM_Transaccional..DimLocalidad as loc	  ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
-            LEFT JOIN  DM_Transaccional..THOrdenesCompraLinea OCL ON OCL.porID=OC.porID
-            LEFT JOIN DM_Transaccional..DimProducto produc ON produc.IDProducto=OCL.IDProducto 
-            LEFT JOIN DM_Transaccional..DimRubro rubro on rubro.IdRubro=produc.IdRubro
-            --Dado que existe comparacion anual, debe tomarse con año 1 y año -1
-            WHERE   TPO.YEAR = 2023
-                AND  TPO.month between @MESI and @MESF
-            GROUP BY LOC.Region,rubro.RubroN1
-                    )rs WHERE Rank <= 3 ORDER BY Region ASC, Rank ASC 
+        SET @TOP = ''' +str(top)+ '''
+        SELECT * 
+        FROM (SELECT
+				TPO.Year			'Ano'
+				,LOC.Region			'Region'
+				,rubro.RubroN1		'Rub'
+				,SUM(OCL.MontoUSD)  'USD'
+				,SUM(OCL.MontoCLP)	'CLP'
+				,SUM(OCL.MontoCLF)	'CLF'
+				,0					'OC'	-- columna para estandarizar tabla a requerimientos del generador de reportes
+				,Rank() OVER (PARTITION BY LOC.Region ORDER BY  SUM(OCL.MontoUSD) DESC ) 
+								AS	Rank
+			FROM  
+				DM_Transaccional..THOrdenesCompra				  AS OC     
+				LEFT JOIN DM_Transaccional..DimTiempo			  AS TPO	ON OC.IDFechaEnvioOC=TPO.DateKey 
+				LEFT JOIN DM_Transaccional..DimComprador		  AS C      ON OC.IDUnidaddeCompra = C.IDUnidaddeCompra
+				LEFT JOIN DM_Transaccional..DimLocalidad		  AS LOC	ON C.IDLocalidadUnidaddeCompra = LOC.IDLocalidad
+				LEFT JOIN  DM_Transaccional..THOrdenesCompraLinea AS OCL	ON OCL.porID=OC.porID
+				LEFT JOIN DM_Transaccional..DimProducto			  AS PRODUC ON PRODUC.IDProducto=OCL.IDProducto 
+				LEFT JOIN DM_Transaccional..DimRubro			  AS RUBRO	ON RUBRO.IdRubro=PRODUC.IdRubro
+			WHERE   TPO.Year = 2023
+				AND  TPO.Month BETWEEN @MESI AND @MESF
+			GROUP BY LOC.Region, TPO.Year, RUBRO.RubroN1
+					) AS RS
+		WHERE Rank <= @TOP
+		ORDER BY Region ASC, Rank ASC 
         '''
     return q
 
@@ -443,7 +460,7 @@ def queryCompraAgilRegion(mi, mf):
 #-------------------------#
 # Query Top OC por Región #
 #-------------------------#
-def queryOrdenCompraRegion(top, mi, mf):
+def queryOrdenCompraRegionTop(top, mi, mf):
     q = '''
         DECLARE @MESI INT, @MESF  INT
         SET @MESI = ''' +str(mi)+ '''
@@ -496,6 +513,55 @@ def queryOrdenCompraRegion(top, mi, mf):
             WHERE Rank <= ''' +str(top)+ '''
 
             ORDER BY Region ASC, Rank ASC
+        '''
+    return q
+
+
+#O------------------------------------------#
+#O Query OC por Región (q grande como base) #
+#O------------------------------------------#
+def queryOrdenCompraRegion(mi, mf):
+    q = '''
+        DECLARE @MESI INT, @MESF  INT
+        SET @MESI = ''' +str(mi)+ '''
+        SET @MESF = ''' +str(mf)+ '''
+
+        SELECT	TPO.YEAR							'Ano'
+                ,loc.region							'Region'
+                , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD'
+                , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP'
+                , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF'
+                , count(oc.porid)					'OC'
+				,INS.NombreInstitucion				'Ins'
+				,PROV.RazonSocialSucursal			'Prv' --puede ser .NombreSucursal
+				,PROV.RUTSucursal					'PrvID'
+				,OC.CodigoOC						'OCod'
+				,OC.Link							'OLink'
+				,ISNULL(LIC.NombreAdq, OC.NombreOC) 'Mtv'
+                
+        FROM  
+            DM_Transaccional..THOrdenesCompra	AS OC     
+            INNER JOIN DM_Transaccional..DimTiempo				  AS TPO  ON OC.IDFechaEnvioOC = TPO.DateKey 
+            LEFT JOIN DM_Transaccional..DimComprador			  AS COMP ON OC.IDUnidaddeCompra = COMP.IDUnidaddeCompra 
+            LEFT JOIN DM_Transaccional..DimLocalidad			  AS LOC  ON COMP.IDLocalidadUnidaddeCompra = LOC.IDLocalidad
+			LEFT JOIN DM_Transaccional..DimProveedor			  AS PROV ON OC.IDSucursal = PROV.IDSucursal
+            LEFT JOIN DM_Transaccional..DimInstitucion			  AS INS  ON COMP.entCode = INS.entCode
+			LEFT JOIN DM_Transaccional.dbo.THOportunidadesNegocio AS LIC  ON OC.rbhCode = LIC.rbhCode
+	
+        WHERE   TPO.YEAR in (2023)
+			AND TPO.MONTH>= @MESI
+			AND TPO.MONTH<= @MESF
+
+        GROUP BY  Region
+				,TPO.YEAR				
+				,INS.NombreInstitucion
+				,PROV.RazonSocialSucursal
+				,PROV.RUTSucursal
+				,OC.CodigoOC 
+				,OC.Link 
+				,ISNULL(LIC.NombreAdq, OC.NombreOC)
+				
+		ORDER BY Region, TPO.Year
         '''
     return q
 
@@ -689,9 +755,9 @@ def QueryTotalProveedoresNacional(mi, mf):
     return q
 
 
-#-------------------#
-# Regiones del país #
-#-------------------#
+#0000-------------------#
+#0000 Regiones del país #
+#0000-------------------#
 def queryRegiones():
     q = '''
         SELECT DISTINCT [Region]

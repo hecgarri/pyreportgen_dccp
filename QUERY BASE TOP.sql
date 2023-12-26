@@ -1,12 +1,15 @@
-        DECLARE @MESI INT, @MESF  INT
+
+
+		DECLARE @MESI INT, @MESF  INT
         SET @MESI = 1--''' +str(mi)+ '''
         SET @MESF = 11--''' +str(mf)+ '''
+
         SELECT	TPO.YEAR							'Ano'
                 ,loc.region							'Region'
                 , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD'
                 , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP'
                 , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF'
-                , count(oc.porid)					'OC'
+                , count(OC.porid)					'OC'
 				-------------------
 				--HASTA AQUÍ BASE--
 				-------------------
@@ -20,7 +23,7 @@
 						WHEN 'Grande'THEN 'Grande'
 						ELSE 'MiPyme'
 					END
-				END							'Tamano'
+				END							'Tmn'
 				, (CASE OC.porisintegrated
 					WHEN 3 THEN 'Compra Ágil'
 						else (case  OC.IDProcedenciaOC
@@ -30,9 +33,16 @@
 								WHEN 702 THEN 'Licitación Privada'
 								ELSE 'Trato Directo'
 							END)
-					END) 'Modalidad'
-				,INS.NombreInstitucion 'Institución'
+					END) 'Mod'
+				,INS.NombreInstitucion 'Ins'
+				,PROV.RazonSocialSucursal 'Prv' --NombreSucursal
+				,PROV.RUTSucursal	'PrvID'
+				,OC.CodigoOC 'OCod'
+				,OC.Link 'OLink'
+				,ISNULL(LIC.NombreAdq, OC.NombreOC) 'Mtv'
+				,SEC.Sector 'Sec'
                 
+--------------------------------------------------------------------------------
         FROM  
             DM_Transaccional..THOrdenesCompra AS OC     
             INNER JOIN DM_Transaccional..DimTiempo AS TPO           ON OC.IDFechaEnvioOC = TPO.DateKey 
@@ -43,19 +53,19 @@
 				-------------------
 
 			LEFT JOIN DM_Transaccional..DimProveedor AS PROV			ON PROV.IDSucursal=OC.IDSucursal
-			LEFT JOIN DM_Transaccional.dbo.THTamanoProveedor AS TMN1		ON TMN1.entcode = PROV.entCode AND AñoTributario=2021
-			LEFT JOIN Estudios.dbo.TamanoProveedorNuevos20230802 AS TMNa	ON PROV.entcode = TMNa.entCode
+			LEFT JOIN DM_Transaccional..THTamanoProveedor AS TMN1		ON TMN1.entcode = PROV.entCode AND AñoTributario=2021
+			LEFT JOIN Estudios..TamanoProveedorNuevos20230802 AS TMNa	ON PROV.entcode = TMNa.entCode
             LEFT JOIN DM_Transaccional..DimInstitucion AS INS      ON COMP.entCode = INS.entCode
-
+			LEFT JOIN DM_Transaccional.dbo.THOportunidadesNegocio AS LIC ON OC.rbhCode = LIC.rbhCode
+            LEFT JOIN DM_Transaccional..DimSector AS SEC		ON SEC.IdSector = INS.IdSector
 			
-            /*LEFT JOIN DM_Transaccional..DimInstitucion AS I		ON C.entCode = I.entCode   
-            LEFT JOIN DM_Transaccional..DimSector AS S				ON S.IdSector = I.IdSector
+		
 
-			LEFT JOIN DM_Transaccional..DimTamanoProveedor AS TP	ON TP.IdTamano=a.IdTamano*/
-			
+--------------------------------------------------			
         WHERE   TPO.YEAR in (2023)
-            AND		TPO.MONTH>= @MESI
-            AND     TPO.MONTH<= @MESF
+            AND	TPO.MONTH>= @MESI
+            AND TPO.MONTH<= @MESF
+
         GROUP BY  Region
 				,TPO.YEAR				
 				-------------------
@@ -83,8 +93,14 @@
 							END)
 					END)
 				,INS.NombreInstitucion
-
-		ORDER BY Region
+				,PROV.RazonSocialSucursal
+				,PROV.RUTSucursal
+				,OC.CodigoOC 
+				,OC.Link 
+				,ISNULL(LIC.NombreAdq, OC.NombreOC)
+				,SEC.Sector
+				
+		ORDER BY Region, TPO.Year
 
 
 		
