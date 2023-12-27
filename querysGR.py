@@ -1,9 +1,22 @@
 #################################
 ###   Querys para generador   ###
 #################################
-
+from datetime import datetime
 
 #cabiar uso de parametros en query, del 'WHEN' a 'SET'
+
+# retorna str que apunta a base de dato según año indicado
+def bbddAno(ano):
+    bbdd = ''
+    if ano == datetime.now().year or ano == 2023: #actualizar
+        bbdd = 'DM_Transaccional'
+    else:
+        if ano <= 2021:
+            bbdd = '[10.34.71.227].DM_Transaccional'
+        else:
+            bbdd = '[10.34.71.227].DM_Transaccional_'+str(ano)
+    return bbdd
+
 
 #0000----------------------------------#
 #0000 Query con datos a nivel regional #
@@ -333,37 +346,45 @@ def queryTotalRegion(mi, mf):
     return q
 
 
-#------------------------------------------------#
-# Montos totales transados por sector por región #
-#------------------------------------------------#
-def querySectorRegion(mi, mf):
+#0000--------------------------------------------------------------#
+#0000 PROTO: Montos totales transados por sector por región (meses y año) #
+#0000--------------------------------------------------------------#
+def querySectorRegion(mi, mf, ano):
+    bbdd = bbddAno(ano)
+    
     q = '''
-        DECLARE @MESI INT, @MESF  INT
+		DECLARE @MESI INT, @MESF  INT, @ANO INT
         SET @MESI = ''' +str(mi)+ '''
         SET @MESF = ''' +str(mf)+ '''
+		SET @ANO = ''' +str(ano)+ '''
 
-        SELECT 	loc.region,
-            Sector,
-            SUM(OC.MontoUSD+OC.ImpuestoUSD) 'Monto_Bruto_USD',
-            SUM(OC.MontoCLP+OC.ImpuestoCLP) 'Monto_Bruto_CLP',
-            count(oc.porid) CantOC
-            
+        SELECT	TPO.YEAR							'Ano'
+                ,LOC.region							'Region'
+                , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD_''' +str(ano)+ ''''
+                , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP_''' +str(ano)+ ''''
+                , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF_''' +str(ano)+ ''''
+                , COUNT(OC.porid)					'OC_''' +str(ano)+ ''''
+				,SEC.Sector							'Sec'
 
-        FROM DM_Transaccional..THOrdenesCompra AS OC     
-            inner JOIN DM_Transaccional..DimTiempo AS TPO			ON OC.IDFechaEnvioOC=TPO.DateKey
-            left JOIN DM_Transaccional..DimComprador AS C			ON OC.IDUnidaddeCompra = C.IDUnidaddeCompra 
-            left JOIN DM_Transaccional..DimInstitucion AS I			ON C.entCode = I.entCode   
-            LEFT JOIN DM_Transaccional..DimSector AS S				ON S.IdSector = I.IdSector
-            left JOIN DM_Transaccional..DimLocalidad as loc			ON C.IDLocalidadUnidaddeCompra =  LOC.IDLocalidad
+        FROM  
+            '''+bbdd+'''.dbo.THOrdenesCompra			AS OC     
+            INNER JOIN '''+bbdd+'''.dbo.DimTiempo		AS TPO	ON OC.IDFechaEnvioOC = TPO.DateKey 
+            LEFT JOIN '''+bbdd+'''.dbo.DimComprador		AS COMP	ON OC.IDUnidaddeCompra = COMP.IDUnidaddeCompra 
+            LEFT JOIN '''+bbdd+'''.dbo.DimLocalidad		AS LOC	ON COMP.IDLocalidadUnidaddeCompra = LOC.IDLocalidad
+            LEFT JOIN '''+bbdd+'''.dbo.DimInstitucion	AS INS	ON INS.entCode = COMP.entCode
+            LEFT JOIN '''+bbdd+'''.dbo.DimSector		AS SEC	ON SEC.IdSector = INS.IdSector
+		
+        WHERE   TPO.YEAR in (@ANO)
+            AND	TPO.MONTH>= @MESI
+            AND TPO.MONTH<= @MESF
+			AND LOC.region IS NOT NULL
 
-        WHERE   TPO.YEAR in (2023) 
-            AND TPO.MONTH >= @MESI
-            AND	TPO.MONTH <= @MESF
-        GROUP BY  Region,
-            SECTOR
-        order by Region,
-            Monto_Bruto_USD DESC, 
-            SECTOR
+        GROUP BY  Region
+				,TPO.YEAR
+				,SEC.Sector
+				
+		ORDER BY Region
+				,TPO.YEAR
         '''
     return q
 
@@ -763,6 +784,19 @@ def queryRegiones():
         SELECT DISTINCT [Region]
         FROM [DM_Transaccional].[dbo].[DimLocalidad]
         WHERE Region NOT IN ('Sin información', 'Extranjero')
+        '''
+    return q
+
+
+#0000-------------------#
+#0000 Sectores del país #
+#0000-------------------#
+def querySectores():
+    q = '''
+        SELECT Sector
+        FROM DM_Transaccional..DimSector
+        WHERE Sector <> 'SINDATO'
+        ORDER BY Sector 
         '''
     return q
 
