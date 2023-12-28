@@ -360,10 +360,10 @@ def querySectorRegion(mi, mf, ano):
 
         SELECT	TPO.YEAR							'Ano'
                 ,LOC.region							'Region'
-                , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD_''' +str(ano)+ ''''
-                , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP_''' +str(ano)+ ''''
-                , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF_''' +str(ano)+ ''''
-                , COUNT(OC.porid)					'OC_''' +str(ano)+ ''''
+                , SUM(OC.MontoUSD+OC.ImpuestoUSD)	'USD'
+                , SUM(OC.MontoCLP+OC.ImpuestoCLP)	'CLP'
+                , SUM(OC.MontoCLF+OC.ImpuestoCLF)	'CLF'
+                , COUNT(OC.porid)					'OC'
 				,SEC.Sector							'Sec'
 
         FROM  
