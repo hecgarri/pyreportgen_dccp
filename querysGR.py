@@ -793,7 +793,7 @@ def queryRegiones():
 #0000-------------------#
 def querySectores():
     q = '''
-        SELECT Sector
+        SELECT Sector AS Sec
         FROM DM_Transaccional..DimSector
         WHERE Sector <> 'SINDATO'
         ORDER BY Sector 
