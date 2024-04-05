@@ -1,0 +1,15 @@
+•	Variación de transacciones respecto del año anterior. Está el porcentaje, faltaría el monto y las oc correspondientes
+•	% de crecimiento de compra ágil entre un año y otro, además de lo que. ya está
+•	agregar gráfico de participación por regiones para ranking nacional (este está en la plantilla nacional)
+
+
+Las transacciones de {{nomCt}} implican {{totRegVarPlb}} de {{totRegPct}} respecto del mismo periodo anterior.
+
+
+En cuanto la modalidad Compra Ágil -que permite mayor participación de las Empresas de Menor Tamaño en compras de menores montos (igual o menor a 30 UTM), durante {{ano}} se registraron transacciones por un total de {{caRegCLP}} en la {{nom}}. La cifra, que se tradujo en {{caRegOC}} órdenes de compra, implica un crecimiento de {{caRegOCDif}} respecto a {{anoM}}, cuando se transaron {{caRegCLPM}} a través de {{caRegOCM}} órdenes de compra. 
+
+En cuanto la modalidad Compra Ágil -que permite mayor participación de las Empresas de Menor Tamaño en compras de menores montos (igual o menor a 30 UTM), durante 2023 se registraron transacciones por un total de $62.014 millones en la Región de Valparaíso. La cifra, que se tradujo en 90.456 órdenes de compra, implica un crecimiento de 13.649 respecto a 2022, cuando se transaron $49.481 millones a través de 76.807 órdenes de compra. 
+
+Las transacciones de la R. Metropolitana implican una disminución de -0,8% respecto del mismo periodo anterior.
+
+Necesito modificar las query's para usar el servidor 227 para presentar cifras históricas 
