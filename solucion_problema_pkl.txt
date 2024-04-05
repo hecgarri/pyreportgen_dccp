@@ -1,0 +1,31 @@
+Aquí un resumen del problema que tuve con un archivo pkl al intentar sincronizar mi carpeta de github 
+
+1. Eliminar el archivo .pkl y el caché:
+   ```bash
+   git rm --cached Reportes2023_procesados_20240129.pkl
+   git rm -r --cached __pycache__
+   ```
+
+2. Agregar el archivo .pkl y el caché al .gitignore:
+   ```bash
+   echo "Reportes2023_procesados_20240129.pkl" >> .gitignore
+   echo "__pycache__" >> .gitignore
+   ```
+
+3. Confirmar los cambios en el .gitignore:
+   ```bash
+   git add .gitignore
+   git commit -m "Actualizar .gitignore para ignorar archivos .pkl y caché"
+   ```
+
+4. Forzar la eliminación del archivo .pkl del historial de Git:
+   ```bash
+   git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch Reportes2023_procesados_20240129.pkl' --prune-empty --tag-name-filter cat -- --all
+   ```
+
+5. Empujar los cambios reescritos al repositorio remoto:
+   ```bash
+   git push origin --force --all
+   ```
+
+Estos comandos pueden ayudar a resolver el problema de subida del archivo .pkl a GitHub eliminándolo del historial de Git y asegurando que esté correctamente ignorado en el .gitignore.
